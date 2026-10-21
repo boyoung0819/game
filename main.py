@@ -1,3 +1,323 @@
+import streamlit as st
+import random
+import time
+import json
+import secrets
+import requests
+from datetime import datetime
+
+st.set_page_config(page_title="몽글몽글 타운", page_icon="🏡", layout="wide")
+
+# ---------- Supabase 클라우드 저장 ----------
+GAME_KEYS = [
+    "coins", "day", "buildings", "pets", "happiness", "xp", "level",
+    "claimed_quests", "daily_claimed", "last_tick", "log", "gift_opened",
+    "town_name", "last_daily_day", "pet_care", "upgrade_levels"
+]
+
+def cloud_config():
+    try:
+        url = str(st.secrets.get("SUPABASE_URL", "")).strip().rstrip("/")
+        key = str(st.secrets.get("SUPABASE_ANON_KEY", "")).strip()
+        return url, key
+    except Exception:
+        return "", ""
+
+def save_current_game(show_message=False):
+    code = st.session_state.get("save_code", "")
+    url, key = cloud_config()
+    if not code or not url or not key:
+        return False
+    state = {k: st.session_state.get(k) for k in GAME_KEYS if k in st.session_state}
+    try:
+        response = requests.post(
+            f"{url}/rest/v1/rpc/save_game",
+            headers={"apikey": key, "Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={"p_code": code, "p_state": state}, timeout=12
+        )
+        response.raise_for_status()
+        if show_message:
+            st.success("☁️ 마을을 클라우드에 저장했어!")
+        return True
+    except Exception as exc:
+        if show_message:
+            st.error(f"저장에 실패했어. Supabase 설정을 확인해 줘. ({exc})")
+        return False
+
+def load_game_from_cloud(code):
+    url, key = cloud_config()
+    if not url or not key:
+        st.error("먼저 Streamlit Settings → Secrets에 Supabase 주소와 키를 입력해 줘.")
+        return False
+    try:
+        response = requests.post(
+            f"{url}/rest/v1/rpc/load_game",
+            headers={"apikey": key, "Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={"p_code": code.strip()}, timeout=12
+        )
+        response.raise_for_status()
+        state = response.json()
+        if not isinstance(state, dict) or not state:
+            st.error("저장 기록을 찾지 못했어. 저장 코드를 다시 확인해 줘.")
+            return False
+        for k, v in state.items():
+            if k in GAME_KEYS:
+                st.session_state[k] = v
+        st.session_state.save_code = code.strip()
+        st.session_state.last_tick = time.time()
+        return True
+    except Exception as exc:
+        st.error(f"불러오기에 실패했어. Supabase 설정을 확인해 줘. ({exc})")
+        return False
+
+
+# ---------- 스타일 ----------
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Jua&family=Noto+Sans+KR:wght@400;600;800&display=swap');
+html, body, [class*="css"] { font-family: 'Noto Sans KR', sans-serif; }
+.stApp { background: linear-gradient(180deg, #fff8f0 0%, #fffdf8 55%, #f4fff4 100%); }
+h1, h2, h3 { font-family: 'Jua', sans-serif !important; color: #5b536b; }
+.hero {
+  background: linear-gradient(135deg,#ffe3ec,#fff0c9,#dcf7e8);
+  padding: 26px; border-radius: 24px; border: 2px solid #fff;
+  box-shadow: 0 6px 18px #d8c8d533; text-align:center; margin-bottom: 12px;
+}
+.hero h1 { margin:0; font-size: 2.5rem; }
+.hero p { color:#746b7b; margin:8px 0 0 0; }
+.stat {
+  background: #ffffffd9; border: 1px solid #f2e7e9; border-radius: 18px;
+  padding: 14px; text-align:center; box-shadow: 0 3px 10px #bcaab522;
+}
+.stat .emoji { font-size: 1.5rem; }
+.stat .value { font-size: 1.35rem; font-weight: 800; color:#62576e; }
+.stat .label { color:#928696; font-size:.85rem; }
+.tile {
+  background:#fff; border:1px solid #f0e4e8; border-radius:18px;
+  padding:14px; text-align:center; min-height:142px; box-shadow:0 3px 12px #bcaab51c;
+}
+.tile .big { font-size:2.2rem; }
+.tile .name { font-weight:800; color:#62576e; }
+.tile .desc { color:#938696; font-size:.82rem; }
+.notice { background:#fff4d9; padding:12px 15px; border-radius:14px; color:#765e35; }
+.small-muted { color:#938696; font-size:.85rem; }
+div.stButton > button { border-radius: 14px; border: 1px solid #f0dfe6; font-weight:700; }
+div.stButton > button[kind="primary"] { background:#ffb8cc; color:#583f52; border:0; }
+</style>
+""", unsafe_allow_html=True)
+
+# ---------- 게임 데이터 ----------
+BUILDINGS = {
+    "작은 집": {"emoji":"🏡","cost":80,"income":4,"happiness":2,"desc":"주민이 살 수 있는 포근한 집"},
+    "꽃밭": {"emoji":"🌷","cost":120,"income":2,"happiness":6,"desc":"마을을 화사하게 만드는 꽃밭"},
+    "빵집": {"emoji":"🥐","cost":220,"income":12,"happiness":4,"desc":"고소한 빵 냄새가 솔솔"},
+    "카페": {"emoji":"☕","cost":350,"income":18,"happiness":7,"desc":"주민들의 인기 만점 쉼터"},
+    "분수 광장": {"emoji":"⛲","cost":500,"income":8,"happiness":12,"desc":"모두가 모이는 마을 중심"},
+    "마법 정원": {"emoji":"🪄","cost":800,"income":25,"happiness":18,"desc":"반짝이는 꽃이 피어나는 비밀 정원"},
+}
+PETS = [
+    {"name":"구름이","emoji":"🐰","desc":"포근하고 다정한 토끼"},
+    {"name":"콩떡이","emoji":"🐻","desc":"간식을 좋아하는 곰"},
+    {"name":"별이","emoji":"🐱","desc":"밤마다 별을 세는 고양이"},
+    {"name":"솜사탕","emoji":"🐶","desc":"산책을 좋아하는 강아지"},
+    {"name":"푸딩이","emoji":"🐣","desc":"노래 부르기를 좋아하는 병아리"},
+    {"name":"반짝이","emoji":"🦊","desc":"호기심 많은 여우"},
+]
+QUESTS = [
+    {"id":"build3","title":"마을의 첫걸음","desc":"건물 3개 짓기","reward":120},
+    {"id":"earn500","title":"알뜰한 마을","desc":"보유 코인 500개 모으기","reward":100},
+    {"id":"pet1","title":"새로운 가족","desc":"펫 한 마리 입양하기","reward":90},
+    {"id":"build6","title":"마을 확장","desc":"건물 6개 짓기","reward":220},
+    {"id":"happy50","title":"행복한 마을","desc":"행복도 50 달성하기","reward":150},
+]
+
+def init_state():
+    defaults = {
+        "coins": 300, "day": 1, "buildings": [], "pets": [], "happiness": 20,
+        "xp": 0, "level": 1, "claimed_quests": [], "daily_claimed": False,
+        "last_tick": time.time(), "log": ["🌱 몽글몽글 타운에 온 걸 환영해! 작은 집부터 지어 보자."],
+        "gift_opened": False, "town_name": "몽글마을", "last_daily_day": 0,
+        "pet_care": {}, "upgrade_levels": {},
+    }
+    for key, val in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = val
+
+def log(message):
+    st.session_state.log.insert(0, message)
+    st.session_state.log = st.session_state.log[:8]
+
+def get_income():
+    base = sum(BUILDINGS[b]["income"] for b in st.session_state.buildings)
+    return base + sum(st.session_state.upgrade_levels.get(b, 0) * 3 for b in st.session_state.buildings)
+
+def get_happiness():
+    return min(100, 20 + sum(BUILDINGS[b]["happiness"] for b in st.session_state.buildings) + len(st.session_state.pets) * 5)
+
+def town_level():
+    xp = st.session_state.xp
+    return 1 + xp // 100
+
+def update_level():
+        
+    new_level = town_level()
+    if new_level > st.session_state.level:
+        st.session_state.level = new_level
+        bonus = 100 * (new_level - 1)
+        st.session_state.coins += bonus
+        log(f"🎉 마을 레벨 {new_level} 달성! 축하 코인 {bonus}개를 받았어.")
+
+def earn_passive():
+    now = time.time()
+    elapsed = now - st.session_state.last_tick
+    # 탭을 열어 둔 동안만 최대 30초치 수익 반영
+    ticks = min(int(elapsed // 15), 120)
+    if ticks > 0:
+        earned = ticks * get_income()
+        st.session_state.coins += earned
+        st.session_state.last_tick = now
+        if earned:
+            st.session_state.xp += ticks * 2
+            update_level()
+
+init_state()
+earn_passive()
+st.session_state.happiness = get_happiness()
+
+# ---------- 상단 ----------
+st.markdown(f"""
+<div class="hero">
+  <div style="font-size:2.6rem">🌷 🐰 🏡 🐻 🌷</div>
+  <h1>몽글몽글 타운</h1>
+  <p>작은 행복이 모여 커다란 마을이 되는 곳 · {st.session_state.town_name}</p>
+</div>
+""", unsafe_allow_html=True)
+
+# 사이드바
+with st.sidebar:
+    st.markdown("## ☁️ 클라우드 저장")
+    cloud_url, cloud_key = cloud_config()
+    if not cloud_url or not cloud_key:
+        st.caption("클라우드 저장을 사용하려면 Streamlit의 Settings → Secrets 설정이 필요해.")
+    else:
+        if not st.session_state.get("save_code"):
+            if st.button("새 저장 코드 만들기", use_container_width=True):
+                st.session_state.save_code = secrets.token_urlsafe(12)
+                save_current_game(show_message=True)
+                save_current_game()
+                st.rerun()
+        if st.session_state.get("save_code"):
+            st.text_input("내 저장 코드 (따로 보관하기)", value=st.session_state.save_code, disabled=True)
+            if st.button("☁️ 지금 저장하기", use_container_width=True):
+                save_current_game(show_message=True)
+        code_to_load = st.text_input("기존 저장 코드로 불러오기", key="cloud_load_code")
+        if st.button("📥 저장된 마을 불러오기", use_container_width=True):
+            if code_to_load.strip() and load_game_from_cloud(code_to_load):
+                st.success("마을을 불러왔어!")
+                save_current_game()
+                st.rerun()
+            elif not code_to_load.strip():
+                st.warning("저장 코드를 입력해 줘.")
+        st.markdown("---")
+    st.markdown("## 🏡 마을 안내")
+    new_name = st.text_input("마을 이름", value=st.session_state.town_name, max_chars=12)
+    if new_name.strip() and new_name != st.session_state.town_name:
+        st.session_state.town_name = new_name.strip()
+        save_current_game()
+        st.rerun()
+    st.caption("마을을 꾸미고 주민과 펫을 돌봐 줘!")
+    st.markdown("---")
+    st.markdown("### 🎁 오늘의 선물")
+    if not st.session_state.daily_claimed:
+        if st.button("출석 보상 받기 🍓", use_container_width=True, type="primary"):
+            reward = random.randint(40, 90)
+            st.session_state.coins += reward
+            st.session_state.daily_claimed = True
+            st.session_state.xp += 10
+            update_level()
+            log(f"🎁 출석 보상으로 코인 {reward}개를 받았어!")
+            save_current_game()
+            st.rerun()
+    else:
+        st.success("오늘의 선물을 받았어! 💗")
+    if st.button("🎲 랜덤 선물 상자", use_container_width=True):
+        if st.session_state.gift_opened:
+            st.info("선물 상자는 하루에 한 번 열 수 있어!")
+        else:
+            reward = random.choice([30, 50, 80, 120, 180])
+            st.session_state.coins += reward
+            st.session_state.gift_opened = True
+            st.session_state.xp += 8
+            update_level()
+            log(f"🎀 선물 상자에서 코인 {reward}개가 나왔어!")
+            save_current_game()
+            st.rerun()
+    st.markdown("---")
+    st.markdown("### 🔄 게임 관리")
+    if st.button("새 게임 시작", use_container_width=True):
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.rerun()
+    st.caption("※ 새 게임을 시작하면 현재 진행 상황이 초기화돼.")
+# 지표
+cols = st.columns(4)
+stats = [
+    ("🪙", f"{st.session_state.coins:,}", "보유 코인"),
+    ("⭐", f"Lv. {st.session_state.level}", "마을 레벨"),
+    ("😊", f"{st.session_state.happiness}/100", "행복도"),
+    ("🏗️", f"{len(st.session_state.buildings)}개", "건물 수"),
+]
+for col, (emoji, value, label) in zip(cols, stats):
+    with col:
+        st.markdown(f'<div class="stat"><div class="emoji">{emoji}</div><div class="value">{value}</div><div class="label">{label}</div></div>', unsafe_allow_html=True)
+
+st.progress(min(1.0, (st.session_state.xp % 100) / 100), text=f"다음 레벨까지 경험치 {st.session_state.xp % 100}/100")
+st.markdown(f'<div class="notice">💰 건물 수익: <b>{get_income()} 코인</b> / 15초 · 건물을 짓고 마을을 발전시켜 보자!</div>', unsafe_allow_html=True)
+st.write("")
+
+tab_town, tab_build, tab_pet, tab_quest, tab_book = st.tabs(["🌼 우리 마을", "🛠️ 건설하기", "🐾 펫 돌보기", "📜 퀘스트", "🏆 도감·기록"])
+
+with tab_town:
+    st.subheader("🌳 한눈에 보는 우리 마을")
+    if not st.session_state.buildings:
+        st.markdown("""
+        <div class="hero">
+          <div style="font-size:3rem">🌱 🪨 🌱</div>
+          <h3>아직 작은 빈터야!</h3>
+          <p>건설하기에서 작은 집을 지으면 마을이 시작돼.</p>
+        </div>""", unsafe_allow_html=True)
+    else:
+        # 간단한 마을 타일 그리드
+        all_tiles = [("🌳", "큰 나무", "마을의 초록 친구")]
+        for b in st.session_state.buildings:
+            all_tiles.append((BUILDINGS[b]["emoji"], b, BUILDINGS[b]["desc"]))
+        all_tiles.extend([(p["emoji"], p["name"], p["desc"]) for p in st.session_state.pets])
+        all_tiles.extend([("🌼","야생화","길가에 핀 작은 꽃")] * 2)
+        for start in range(0, len(all_tiles), 4):
+            row = st.columns(4)
+            for col, (emoji, name, desc) in zip(row, all_tiles[start:start+4]):
+                with col:
+                    st.markdown(f'<div class="tile"><div class="big">{emoji}</div><div class="name">{name}</div><div class="desc">{desc}</div></div>', unsafe_allow_html=True)
+    st.write("")
+    left, right = st.columns(2)
+    with left:
+        st.markdown("### 🌈 마을 상태")
+        st.write(f"**마을 이름:** {st.session_state.town_name}")
+        st.write(f"**하루 수익(게임 기준):** {get_income() * 4:,} 코인")
+        st.write(f"**입양한 펫:** {len(st.session_state.pets)}마리")
+        st.write(f"**마을 경험치:** {st.session_state.xp} XP")
+    with right:
+        st.markdown("### 💌 마을 소식")
+        for item in st.session_state.log[:5]:
+            st.write("• " + item)
+    if st.button("🌤️ 하루 보내기", type="primary", key="pass_day"):
+        earned = get_income() * 4
+        st.session_state.coins += earned
+        st.session_state.day += 1
+        st.session_state.xp += 15
+        st.session_state.daily_claimed = False
+        st.session_state.gift_opened = False
+        update_level()
         log(f"🌤️ {st.session_state.day}일째! 마을이 코인 {earned}개를 벌었어.")
         save_current_game()
         st.rerun()
@@ -126,3 +446,4 @@ with tab_book:
     ]
     for title, done, desc in achievements:
         st.write(f"{'🏅' if done else '▫️'} **{title}** — {desc}")
+        
