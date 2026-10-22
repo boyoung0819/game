@@ -72,11 +72,27 @@ button:active{transform:translateY(2px);box-shadow:none}
 
 <script>
 (()=>{
-const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
-const message=document.getElementById('message'),berryLabel=document.getElementById('berry');
-const backdrop=document.getElementById('dialogBackdrop'),speaker=document.getElementById('speaker'),portrait=document.getElementById('portrait'),dialogText=document.getElementById('dialogText');
+'use strict';
+
+const canvas=document.getElementById('game');
+const ctx=canvas.getContext('2d');
+const message=document.getElementById('message');
+const berryLabel=document.getElementById('berry');
+const backdrop=document.getElementById('dialogBackdrop');
+const speaker=document.getElementById('speaker');
+const portrait=document.getElementById('portrait');
+const dialogText=document.getElementById('dialogText');
+
 const W=960,H=590,MW=1700,MH=1250,SAVE='mongle_explore_v5';
-let keys={},held='',lastTime=0,walk=0,berryCount=0,petEmoji='',petName='',eventCounter=0,activeCharacter={name:'몽글이',hair:'#76564f',outfit:'#e9a9c1',accent:'#f5d99a'};
+
+let keys={},held='',lastTime=0,walk=0,berryCount=0;
+let petEmoji='',petName='',eventCounter=0;
+let activeCharacter={
+  name:'몽글이',
+  hair:'#76564f',
+  outfit:'#e9a9c1',
+  accent:'#f5d99a'
+};
 let dialogQueue=[],dialogIndex=0,currentNpc=null;
 
 function readSave(){
@@ -91,65 +107,139 @@ const player={
   face:1
 };
 const pet={x:player.x-40,y:player.y+20};
-const spots=[[220,210],[430,300],[720,180],[1050,230],[1420,300],[1320,620],[1070,870],[740,1000],[360,850],[1550,1030],[880,430],[550,620]];
+
+const spots=[
+  [220,210],[430,300],[720,180],[1050,230],
+  [1420,300],[1320,620],[1070,870],[740,1000],
+  [360,850],[1550,1030],[880,430],[550,620]
+];
+
 const collected=new Set(Array.isArray(saved.got)?saved.got:[]);
-const berries=spots.map((p,i)=>({x:p[0],y:p[1],id:i,got:collected.has(i),phase:i*1.73}));
+const berries=spots.map((p,i)=>({
+  x:p[0],y:p[1],id:i,got:collected.has(i),phase:i*1.73
+}));
 
 const npcs=[
-{x:640,y:570,name:'콩이',emoji:'🐻',kind:'bear',skin:'#c99872',hair:'#8b634c',clothes:'#e6b9a4',line:['안녕! 오늘 마을 산책은 어때?','반짝이는 딸기를 발견하면 꼭 주워 봐. 코인과 경험치도 받을 수 있거든!']},
-{x:1120,y:510,name:'구름 할머니',emoji:'👵🏻',kind:'grandma',skin:'#edc6ad',hair:'#d7c7b6',clothes:'#b7c8df',line:['어서 오렴, 산책하기 좋은 날이구나.','연못 옆 길을 따라가 보렴. 꽃이 가장 예쁘게 피어 있는 곳이란다.']},
-{x:920,y:760,name:'토리',emoji:'🐰',kind:'bunny',skin:'#f3e7dc',hair:'#cbb8a8',clothes:'#b9d9c4',line:['안녕! 나는 별빛 도서관에 자주 가.','책 속에는 아직 가 보지 못한 세상이 가득하거든!']},
-{x:350,y:570,name:'별이',emoji:'🐱',kind:'cat',skin:'#d6c4ec',hair:'#8d779f',clothes:'#f0c2d2',line:['꽃집에서 가장 향기로운 꽃을 골라 봐!','나는 분홍색 꽃을 제일 좋아해. 네가 좋아하는 꽃은 뭐야?']}
+  {
+    x:640,y:570,name:'콩이',emoji:'🐻',kind:'bear',
+    skin:'#c99872',hair:'#8b634c',clothes:'#e6b9a4',
+    line:['안녕! 오늘 마을 산책은 어때?','반짝이는 딸기를 발견하면 꼭 주워 봐. 코인과 경험치도 받을 수 있거든!']
+  },
+  {
+    x:1120,y:510,name:'구름 할머니',emoji:'👵🏻',kind:'grandma',
+    skin:'#edc6ad',hair:'#d7c7b6',clothes:'#b7c8df',
+    line:['어서 오렴, 산책하기 좋은 날이구나.','연못 옆 길을 따라가 보렴. 꽃이 가장 예쁘게 피어 있는 곳이란다.']
+  },
+  {
+    x:920,y:760,name:'토리',emoji:'🐰',kind:'bunny',
+    skin:'#f3e7dc',hair:'#cbb8a8',clothes:'#b9d9c4',
+    line:['안녕! 나는 별빛 도서관에 자주 가.','책 속에는 아직 가 보지 못한 세상이 가득하거든!']
+  },
+  {
+    x:350,y:570,name:'별이',emoji:'🐱',kind:'cat',
+    skin:'#d6c4ec',hair:'#8d779f',clothes:'#f0c2d2',
+    line:['꽃집에서 가장 향기로운 꽃을 골라 봐!','나는 분홍색 꽃을 제일 좋아해. 네가 좋아하는 꽃은 뭐야?']
+  }
 ];
 
 const buildings=[
-{x:440,y:360,w:150,h:118,wall:'#f6e8d6',roof:'#cb8b9d',name:'딸기 빵집',icon:'🥐'},
-{x:1110,y:370,w:155,h:118,wall:'#f4e8cb',roof:'#a99bc9',name:'포근 카페',icon:'☕'},
-{x:770,y:820,w:150,h:116,wall:'#f3dfe3',roof:'#bf8299',name:'작은 집',icon:'🏡'},
-{x:1330,y:830,w:150,h:116,wall:'#e2dff3',roof:'#888bbd',name:'별빛 도서관',icon:'📚'},
-{x:250,y:700,w:125,h:96,wall:'#f6e8d7',roof:'#d9b278',name:'꽃집',icon:'🌷'}
+  {x:440,y:360,w:150,h:118,wall:'#f6e8d6',roof:'#cb8b9d',name:'딸기 빵집',icon:'🥐'},
+  {x:1110,y:370,w:155,h:118,wall:'#f4e8cb',roof:'#a99bc9',name:'포근 카페',icon:'☕'},
+  {x:770,y:820,w:150,h:116,wall:'#f3dfe3',roof:'#bf8299',name:'작은 집',icon:'🏡'},
+  {x:1330,y:830,w:150,h:116,wall:'#e2dff3',roof:'#888bbd',name:'별빛 도서관',icon:'📚'},
+  {x:250,y:700,w:125,h:96,wall:'#f6e8d7',roof:'#d9b278',name:'꽃집',icon:'🌷'}
 ];
-const pond={x:1280,y:650,rx:145,ry:85},trees=[],grass=[],flowers=[];
 
-for(let y=70;y<MH;y+=185)
-  for(let x=75+(Math.floor(y/185)%2)*55;x<MW;x+=205)
-    if(!((x>350&&x<610&&y>220&&y<450)||(x>850&&x<1250&&y>280&&y<530)||(x>650&&x<980&&y>680&&y<960)))
-      trees.push({x:x+Math.sin(x*y)*18,y:y+Math.cos(x+y)*16,s:.78+((x+y)%5)*.055});
+const pond={x:1280,y:650,rx:145,ry:85};
+const trees=[],grass=[],flowers=[];
 
-for(let i=0;i<520;i++)
-  grass.push({x:(i*139+29)%MW,y:(i*211+67)%MH,size:2+i%4,shade:i%3});
+for(let y=70;y<MH;y+=185){
+  for(let x=75+(Math.floor(y/185)%2)*55;x<MW;x+=205){
+    if(!((x>350&&x<610&&y>220&&y<450)||
+         (x>850&&x<1250&&y>280&&y<530)||
+         (x>650&&x<980&&y>680&&y<960))){
+      trees.push({
+        x:x+Math.sin(x*y)*18,
+        y:y+Math.cos(x+y)*16,
+        s:.78+((x+y)%5)*.055
+      });
+    }
+  }
+}
 
-for(let i=0;i<150;i++)
-  flowers.push({x:(i*193+41)%MW,y:(i*127+77)%MH,c:['#fff0b1','#fff9f5','#e9c8f4','#f7bfd1','#c4e8ee'][i%5]});
+for(let i=0;i<520;i++){
+  grass.push({
+    x:(i*139+29)%MW,
+    y:(i*211+67)%MH,
+    size:2+i%4,
+    shade:i%3
+  });
+}
+
+for(let i=0;i<150;i++){
+  flowers.push({
+    x:(i*193+41)%MW,
+    y:(i*127+77)%MH,
+    c:['#fff0b1','#fff9f5','#e9c8f4','#f7bfd1','#c4e8ee'][i%5]
+  });
+}
 
 function save(){
-  try{localStorage.setItem(SAVE,JSON.stringify({x:player.x,y:player.y,got:[...collected]}))}
-  catch(e){}
+  try{
+    localStorage.setItem(SAVE,JSON.stringify({
+      x:player.x,y:player.y,got:[...collected]
+    }));
+  }catch(e){}
 }
+
 function say(t){message.textContent=t}
+
 function send(type,extra={}){
   eventCounter++;
-  const id=(typeof crypto!=='undefined'&&crypto.randomUUID)?crypto.randomUUID():`${Date.now()}-${eventCounter}-${Math.random().toString(36).slice(2)}`;
-  window.parent.postMessage({isStreamlitMessage:true,type:'streamlit:setComponentValue',value:{type,event:type,event_id:id,...extra},dataType:'json'},'*')
+  const id=(typeof crypto!=='undefined'&&crypto.randomUUID)
+    ?crypto.randomUUID()
+    :`${Date.now()}-${eventCounter}-${Math.random().toString(36).slice(2)}`;
+
+  window.parent.postMessage({
+    isStreamlitMessage:true,
+    type:'streamlit:setComponentValue',
+    value:{type,event:type,event_id:id,...extra},
+    dataType:'json'
+  },'*');
 }
+
 function rr(x,y,w,h,r,c){
   ctx.fillStyle=c;
   ctx.beginPath();
-  ctx.roundRect(x,y,w,h,r);
-  ctx.fill()
+  r=Math.max(0,Math.min(r,w/2,h/2));
+  ctx.moveTo(x+r,y);
+  ctx.lineTo(x+w-r,y);
+  ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r);
+  ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h);
+  ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r);
+  ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();
+  ctx.fill();
 }
+
 function text(t,x,y,size=14,c='#5c5065'){
   ctx.font=`${size}px system-ui,sans-serif`;
   ctx.textAlign='center';
+  ctx.textBaseline='alphabetic';
   ctx.fillStyle=c;
-  ctx.fillText(t,x,y)
+  ctx.fillText(t,x,y);
 }
+
 function el(x,y,rx,ry,c){
   ctx.fillStyle=c;
   ctx.beginPath();
   ctx.ellipse(x,y,rx,ry,0,0,Math.PI*2);
-  ctx.fill()
+  ctx.fill();
 }
+
 function flower(x,y,c){
   ctx.strokeStyle='#7eaa72';
   ctx.lineWidth=1.5;
@@ -157,12 +247,14 @@ function flower(x,y,c){
   ctx.moveTo(x,y);
   ctx.lineTo(x-1,y+8);
   ctx.stroke();
+
   for(let i=0;i<5;i++){
-    let a=i*Math.PI*2/5;
-    el(x+Math.cos(a)*3.4,y+Math.sin(a)*3.4,3,3,c)
+    const a=i*Math.PI*2/5;
+    el(x+Math.cos(a)*3.4,y+Math.sin(a)*3.4,3,3,c);
   }
-  el(x,y,2,2,'#e7c46b')
+  el(x,y,2,2,'#e7c46b');
 }
+
 function tree(x,y,s){
   ctx.save();
   ctx.translate(x,y);
@@ -175,40 +267,104 @@ function tree(x,y,s){
   el(0,-20,23,25,'#a5ce91');
   el(-7,-25,9,10,'#c5dfa9');
   el(8,-13,7,8,'#b2d89e');
-  ctx.restore()
+  ctx.restore();
 }
 
-// 전신 캐릭터: 옷, 머리카락, 얼굴, 팔과 다리
+/* 집 그리기 */
+function house(b){
+  const x=b.x,y=b.y;
+
+  el(x+b.w/2,y+b.h+5,b.w*.6,12,'#6d79614a');
+
+  ctx.fillStyle='#c8b9ad';
+  ctx.beginPath();
+  ctx.moveTo(x+b.w-10,y+28);
+  ctx.lineTo(x+b.w+8,y+18);
+  ctx.lineTo(x+b.w+8,y+b.h-3);
+  ctx.lineTo(x+b.w-10,y+b.h);
+  ctx.closePath();
+  ctx.fill();
+
+  rr(x,y+23,b.w,b.h-23,5,b.wall);
+
+  ctx.fillStyle=b.roof;
+  ctx.beginPath();
+  ctx.moveTo(x-14,y+29);
+  ctx.lineTo(x+b.w/2,y-30);
+  ctx.lineTo(x+b.w+14,y+29);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle='#ffffff60';
+  ctx.lineWidth=2;
+  ctx.beginPath();
+  ctx.moveTo(x+8,y+26);
+  ctx.lineTo(x+b.w/2,y-23);
+  ctx.stroke();
+
+  rr(x+17,y+48,31,30,4,'#a8d3d8');
+  rr(x+b.w-48,y+48,31,30,4,'#a8d3d8');
+
+  ctx.strokeStyle='#fff9e8';
+  ctx.lineWidth=2;
+
+  for(const wx of [x+17,x+b.w-48]){
+    ctx.beginPath();
+    ctx.moveTo(wx+15,y+49);
+    ctx.lineTo(wx+15,y+77);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(wx,y+63);
+    ctx.lineTo(wx+31,y+63);
+    ctx.stroke();
+  }
+
+  rr(x+b.w/2-13,y+b.h-38,26,38,5,'#9b746b');
+  el(x+b.w/2+7,y+b.h-18,2,2,'#f3d68b');
+  text(b.icon+' '+b.name,x+b.w/2,y+b.h+24,14);
+}
+
+/* 사람 캐릭터 */
 function person(x,y,opt,anim=0,face=1,scale=1){
   const step=Math.sin(anim)*2.4;
   ctx.save();
   ctx.translate(x,y);
   ctx.scale(face*scale,scale);
+
   el(0,25,15,5,'#566b5540');
+
   ctx.strokeStyle=opt.skin||'#f0c9ac';
   ctx.lineWidth=5;
   ctx.lineCap='round';
+
   ctx.beginPath();
   ctx.moveTo(-5,8);
   ctx.lineTo(-6+step,20);
   ctx.stroke();
+
   ctx.beginPath();
   ctx.moveTo(5,8);
   ctx.lineTo(6-step,20);
   ctx.stroke();
+
   el(-7+step,21,5,3,'#f8f2e9');
   el(7-step,21,5,3,'#f8f2e9');
+
   ctx.strokeStyle=opt.skin||'#f0c9ac';
   ctx.lineWidth=5;
+
   ctx.beginPath();
   ctx.moveTo(-10,-7);
   ctx.lineTo(-15+step,-1);
   ctx.stroke();
+
   ctx.beginPath();
   ctx.moveTo(10,-7);
   ctx.lineTo(15-step,-1);
   ctx.stroke();
-  ctx.fillStyle=opt.clothes;
+
+  ctx.fillStyle=opt.clothes||'#e9a9c1';
   ctx.beginPath();
   ctx.moveTo(-9,-12);
   ctx.lineTo(9,-12);
@@ -216,22 +372,27 @@ function person(x,y,opt,anim=0,face=1,scale=1){
   ctx.lineTo(-13,8);
   ctx.closePath();
   ctx.fill();
+
   ctx.strokeStyle='#ffffff80';
   ctx.lineWidth=1.5;
   ctx.beginPath();
   ctx.moveTo(-7,-9);
   ctx.lineTo(-5,5);
   ctx.stroke();
+
   ctx.fillStyle=opt.accent||'#fff0cb';
   ctx.beginPath();
   ctx.moveTo(-4,-12);
   ctx.lineTo(0,-5);
   ctx.lineTo(4,-12);
   ctx.fill();
+
   el(0,0,1.4,1.4,'#fff7e8');
+
   ctx.fillStyle=opt.skin||'#f0c9ac';
   ctx.fillRect(-3,-17,6,7);
   el(0,-25,12,14,opt.skin||'#f0c9ac');
+
   ctx.fillStyle=opt.hair||'#72564d';
   ctx.beginPath();
   ctx.arc(0,-29,13,Math.PI,Math.PI*2);
@@ -240,24 +401,31 @@ function person(x,y,opt,anim=0,face=1,scale=1){
   ctx.quadraticCurveTo(-4,-20,-12,-23);
   ctx.closePath();
   ctx.fill();
+
   el(-4,-24,1.25,1.6,'#51434a');
   el(4,-24,1.25,1.6,'#51434a');
+
   ctx.strokeStyle='#a66e75';
   ctx.lineWidth=1;
   ctx.beginPath();
   ctx.arc(0,-20,2.5,.15,Math.PI-.15);
   ctx.stroke();
+
   el(-7,-20,2.4,1.4,'#e9a9ad90');
   el(7,-20,2.4,1.4,'#e9a9ad90');
-  ctx.restore()
+
+  ctx.restore();
 }
 
+/* 동물 캐릭터 */
 function animal(x,y,spec,anim=0,scale=1){
   const step=Math.sin(anim)*1.8;
   ctx.save();
   ctx.translate(x,y);
   ctx.scale(scale,scale);
+
   el(0,20,15,5,'#566b5540');
+
   ctx.strokeStyle=spec.color;
   ctx.lineWidth=7;
   ctx.lineCap='round';
@@ -265,16 +433,20 @@ function animal(x,y,spec,anim=0,scale=1){
   ctx.moveTo(10,2);
   ctx.quadraticCurveTo(19,-3,15,-9);
   ctx.stroke();
+
   ctx.strokeStyle=spec.color;
   ctx.lineWidth=5;
+
   for(const dx of [-7,7]){
     ctx.beginPath();
     ctx.moveTo(dx,8);
     ctx.lineTo(dx+(dx<0?step:-step),17);
-    ctx.stroke()
+    ctx.stroke();
   }
+
   el(0,0,13,15,spec.color);
   el(0,4,8,9,'#fff8ef');
+
   if(spec.clothes){
     ctx.fillStyle=spec.clothes;
     ctx.beginPath();
@@ -283,49 +455,60 @@ function animal(x,y,spec,anim=0,scale=1){
     ctx.lineTo(9,8);
     ctx.lineTo(-9,8);
     ctx.closePath();
-    ctx.fill()
+    ctx.fill();
   }
+
   if(spec.kind==='bunny'){
     ctx.strokeStyle=spec.color;
     ctx.lineWidth=7;
+
     ctx.beginPath();
     ctx.moveTo(-5,-14);
     ctx.lineTo(-8,-27);
     ctx.stroke();
+
     ctx.beginPath();
     ctx.moveTo(5,-14);
     ctx.lineTo(8,-27);
     ctx.stroke();
+
     ctx.strokeStyle='#f6c6cd';
     ctx.lineWidth=2;
+
     ctx.beginPath();
     ctx.moveTo(-6,-18);
     ctx.lineTo(-7,-25);
     ctx.stroke();
+
     ctx.beginPath();
     ctx.moveTo(6,-18);
     ctx.lineTo(7,-25);
-    ctx.stroke()
-  }else if(spec.kind==='cat'||spec.kind==='bear'||spec.kind==='fox'){
+    ctx.stroke();
+
+  }else if(['cat','bear','fox'].includes(spec.kind)){
     ctx.fillStyle=spec.color;
+
     ctx.beginPath();
     ctx.moveTo(-12,-21);
     ctx.lineTo(-11,-31);
     ctx.lineTo(-3,-24);
     ctx.fill();
+
     ctx.beginPath();
     ctx.moveTo(12,-21);
     ctx.lineTo(11,-31);
     ctx.lineTo(3,-24);
-    ctx.fill()
+    ctx.fill();
   }
+
   el(0,-17,13,12,spec.color);
   el(-4,-17,1.3,1.6,'#51434a');
   el(4,-17,1.3,1.6,'#51434a');
   el(0,-13,2,1.5,'#76545b');
   el(-7,-13,2.5,1.3,'#edacb5');
   el(7,-13,2.5,1.3,'#edacb5');
-  ctx.restore()
+
+  ctx.restore();
 }
 
 function petSpec(){
@@ -342,7 +525,7 @@ function petSpec(){
     '🐸':['bear','#91c78b','#b8d9c3']
   };
   const s=map[petEmoji]||['bunny','#f0e6da','#c4dfcc'];
-  return{kind:s[0],color:s[1],clothes:s[2]}
+  return{kind:s[0],color:s[1],clothes:s[2]};
 }
 
 function nearest(){
@@ -351,7 +534,7 @@ function nearest(){
     const d=Math.hypot(player.x-n.x,player.y-n.y);
     if(d<dist){best=n;dist=d}
   }
-  return best?{npc:best,dist}:null
+  return best?{npc:best,dist}:null;
 }
 
 function openDialogue(n){
@@ -364,36 +547,46 @@ function openDialogue(n){
   backdrop.classList.add('open');
   say('💬 '+n.name+'와 대화 중이야.');
   canvas.focus();
-  send('npc_talk',{npc_name:n.name,message:dialogQueue[0]})
+  send('npc_talk',{npc_name:n.name,message:dialogQueue[0]});
 }
 
 function closeDialogue(){
   backdrop.classList.remove('open');
   currentNpc=null;
   keys={};
-  canvas.focus()
+  canvas.focus();
 }
 
 function nextDialogue(){
   if(!currentNpc)return;
+
   if(dialogIndex<dialogQueue.length-1){
     dialogIndex++;
     dialogText.textContent=dialogQueue[dialogIndex];
-    send('npc_talk',{npc_name:currentNpc.name,message:dialogQueue[dialogIndex]})
+    send('npc_talk',{
+      npc_name:currentNpc.name,
+      message:dialogQueue[dialogIndex]
+    });
   }else{
     closeDialogue();
-    say('🌿 대화를 마쳤어. 마을을 계속 탐험해 봐!')
+    say('🌿 대화를 마쳤어. 마을을 계속 탐험해 봐!');
   }
 }
 
 function talk(){
-  if(backdrop.classList.contains('open')){nextDialogue();return}
+  if(backdrop.classList.contains('open')){
+    nextDialogue();
+    return;
+  }
+
   const r=nearest();
+
   if(!r||r.dist>90){
     say('💭 주민이 조금 멀리 있어. 가까이 다가가서 E를 눌러 봐!');
-    return
+    return;
   }
-  openDialogue(r.npc)
+
+  openDialogue(r.npc);
 }
 
 function collect(b){
@@ -402,8 +595,13 @@ function collect(b){
   berryCount++;
   berryLabel.textContent='🍓 열매 '+berryCount+'개';
   say('🍓 딸기를 주웠어! 코인 +10 · 경험치 +3');
-  send('berry_collected',{berry_id:b.id,coins:10,exp:3,berry_count:berryCount});
-  save()
+  send('berry_collected',{
+    berry_id:b.id,
+    coins:10,
+    exp:3,
+    berry_count:berryCount
+  });
+  save();
 }
 
 function reset(){
@@ -413,155 +611,190 @@ function reset(){
   pet.y=player.y+20;
   save();
   say('🌿 광장으로 돌아왔어!');
-  canvas.focus()
+  canvas.focus();
 }
 
 function update(dt){
   if(backdrop.classList.contains('open'))return;
+
   let dx=0,dy=0;
+
   if(keys.ArrowUp||keys.w||keys.W||held==='up')dy--;
   if(keys.ArrowDown||keys.s||keys.S||held==='down')dy++;
   if(keys.ArrowLeft||keys.a||keys.A||held==='left')dx--;
   if(keys.ArrowRight||keys.d||keys.D||held==='right')dx++;
+
   const len=Math.hypot(dx,dy)||1;
   dx/=len;
   dy/=len;
+
   const speed=205;
   player.x=Math.max(24,Math.min(MW-24,player.x+dx*speed*dt));
   player.y=Math.max(35,Math.min(MH-25,player.y+dy*speed*dt));
+
   if(dx)player.face=dx<0?-1:1;
   if(dx||dy)walk+=dt*10;
+
   const d=Math.hypot(player.x-pet.x,player.y-pet.y);
+
   if(d>32){
     const step=Math.min(1,dt*4.5);
     pet.x+=(player.x-38*player.face-pet.x)*step;
-    pet.y+=(player.y+18-pet.y)*step
+    pet.y+=(player.y+18-pet.y)*step;
   }
-  for(const b of berries)
-    if(!b.got&&Math.hypot(player.x-b.x,player.y-b.y)<27)collect(b)
+
+  for(const b of berries){
+    if(!b.got&&Math.hypot(player.x-b.x,player.y-b.y)<27){
+      collect(b);
+    }
+  }
 }
 
 function render(now){
-  const dt=Math.min((now-lastTime)/1000||0,.04);
-  lastTime=now;
-  update(dt);
-  const camX=Math.max(0,Math.min(MW-W,player.x-W/2));
-  const camY=Math.max(0,Math.min(MH-H,player.y-H/2));
-  ctx.clearRect(0,0,W,H);
-  ctx.save();
-  ctx.translate(-camX,-camY);
+  try{
+    const dt=Math.min((now-lastTime)/1000||0,.04);
+    lastTime=now;
+    update(dt);
 
-  const grad=ctx.createLinearGradient(0,0,MW,MH);
-  grad.addColorStop(0,'#d5e7c5');
-  grad.addColorStop(.55,'#c4ddb6');
-  grad.addColorStop(1,'#b8d5ae');
-  ctx.fillStyle=grad;
-  ctx.fillRect(0,0,MW,MH);
+    const camX=Math.max(0,Math.min(MW-W,player.x-W/2));
+    const camY=Math.max(0,Math.min(MH-H,player.y-H/2));
 
-  for(const g of grass){
-    ctx.strokeStyle=['#9dbd8e65','#e8efcf85','#a8c89b70'][g.shade];
-    ctx.lineWidth=1.2;
-    ctx.beginPath();
-    ctx.moveTo(g.x,g.y);
-    ctx.lineTo(g.x+g.size,g.y-g.size*1.6);
-    ctx.stroke()
-  }
+    ctx.clearRect(0,0,W,H);
+    ctx.save();
+    ctx.translate(-camX,-camY);
 
-  for(const f of flowers)flower(f.x,f.y,f.c);
+    const grad=ctx.createLinearGradient(0,0,MW,MH);
+    grad.addColorStop(0,'#d5e7c5');
+    grad.addColorStop(.55,'#c4ddb6');
+    grad.addColorStop(1,'#b8d5ae');
+    ctx.fillStyle=grad;
+    ctx.fillRect(0,0,MW,MH);
 
-  ctx.lineCap='round';
-  ctx.strokeStyle='#b9a589';
-  ctx.lineWidth=110;
-  ctx.beginPath();
-  ctx.moveTo(40,600);
-  ctx.bezierCurveTo(360,520,550,680,850,600);
-  ctx.bezierCurveTo(1100,520,1240,650,1650,570);
-  ctx.stroke();
-
-  ctx.strokeStyle='#f0dfc4';
-  ctx.lineWidth=96;
-  ctx.beginPath();
-  ctx.moveTo(40,600);
-  ctx.bezierCurveTo(360,520,550,680,850,600);
-  ctx.bezierCurveTo(1100,520,1240,650,1650,570);
-  ctx.stroke();
-
-  ctx.lineWidth=86;
-  ctx.beginPath();
-  ctx.moveTo(800,100);
-  ctx.bezierCurveTo(750,400,930,520,850,1200);
-  ctx.stroke();
-
-  el(pond.x,pond.y+8,pond.rx+8,pond.ry+8,'#9ba98a55');
-  el(pond.x,pond.y,pond.rx,pond.ry,'#84c6d5');
-  el(pond.x-20,pond.y-12,pond.rx*.7,pond.ry*.55,'#9bd7df');
-  ctx.strokeStyle='#d7f0e9';
-  ctx.lineWidth=3;
-  ctx.beginPath();
-  ctx.ellipse(pond.x,pond.y,pond.rx-12,pond.ry-10,0,0,Math.PI*2);
-  ctx.stroke();
-  el(pond.x-45,pond.y-25,27,3,'#e5f7eea0');
-  text('연못',pond.x,pond.y+7,15);
-
-  for(const b of buildings)house(b);
-  for(const t of trees)tree(t.x,t.y,t.s);
-
-  for(const b of berries){
-    if(b.got)continue;
-    const bob=Math.sin(now/350+b.phase)*3;
-    el(b.x,b.y+7,12,4,'#8caa7755');
-    el(b.x,b.y-9+bob,15,15,'#fff5ceaa');
-    text('🍓',b.x,b.y+bob,21)
-  }
-
-  for(const n of npcs){
-    if(n.kind==='bear'||n.kind==='bunny'||n.kind==='cat')
-      animal(n.x,n.y,{kind:n.kind,color:n.skin,clothes:n.clothes},walk*.5,1.05);
-    else
-      person(n.x,n.y,{skin:n.skin,hair:n.hair,clothes:n.clothes,accent:'#f9ead1'},walk*.4,1,1.05);
-
-    rr(n.x-38,n.y-52,76,20,8,'#fffaf0ef');
-    text(n.name,n.x,n.y-38,11);
-
-    const r=nearest();
-    if(r&&r.npc===n&&r.dist<90&&!backdrop.classList.contains('open')){
-      rr(n.x-43,n.y-79,86,23,9,'#fffdf5');
-      text('E  대화하기',n.x,n.y-64,12)
+    for(const g of grass){
+      ctx.strokeStyle=['#9dbd8e65','#e8efcf85','#a8c89b70'][g.shade];
+      ctx.lineWidth=1.2;
+      ctx.beginPath();
+      ctx.moveTo(g.x,g.y);
+      ctx.lineTo(g.x+g.size,g.y-g.size*1.6);
+      ctx.stroke();
     }
-  }
 
-  const spec=petSpec();
-  animal(pet.x,pet.y,spec,walk*.7,1.02);
-  if(petName)text(petName,pet.x,pet.y-42,11);
+    for(const f of flowers)flower(f.x,f.y,f.c);
 
-  person(
-    player.x,player.y,
-    {
+    ctx.lineCap='round';
+    ctx.strokeStyle='#b9a589';
+    ctx.lineWidth=110;
+    ctx.beginPath();
+    ctx.moveTo(40,600);
+    ctx.bezierCurveTo(360,520,550,680,850,600);
+    ctx.bezierCurveTo(1100,520,1240,650,1650,570);
+    ctx.stroke();
+
+    ctx.strokeStyle='#f0dfc4';
+    ctx.lineWidth=96;
+    ctx.beginPath();
+    ctx.moveTo(40,600);
+    ctx.bezierCurveTo(360,520,550,680,850,600);
+    ctx.bezierCurveTo(1100,520,1240,650,1650,570);
+    ctx.stroke();
+
+    ctx.lineWidth=86;
+    ctx.beginPath();
+    ctx.moveTo(800,100);
+    ctx.bezierCurveTo(750,400,930,520,850,1200);
+    ctx.stroke();
+
+    el(pond.x,pond.y+8,pond.rx+8,pond.ry+8,'#9ba98a55');
+    el(pond.x,pond.y,pond.rx,pond.ry,'#84c6d5');
+    el(pond.x-20,pond.y-12,pond.rx*.7,pond.ry*.55,'#9bd7df');
+
+    ctx.strokeStyle='#d7f0e9';
+    ctx.lineWidth=3;
+    ctx.beginPath();
+    ctx.ellipse(pond.x,pond.y,pond.rx-12,pond.ry-10,0,0,Math.PI*2);
+    ctx.stroke();
+
+    el(pond.x-45,pond.y-25,27,3,'#e5f7eea0');
+    text('연못',pond.x,pond.y+7,15);
+
+    for(const b of buildings)house(b);
+    for(const t of trees)tree(t.x,t.y,t.s);
+
+    for(const b of berries){
+      if(b.got)continue;
+      const bob=Math.sin(now/350+b.phase)*3;
+      el(b.x,b.y+7,12,4,'#8caa7755');
+      el(b.x,b.y-9+bob,15,15,'#fff5ceaa');
+      text('🍓',b.x,b.y+bob,21);
+    }
+
+    /* 주민은 나무와 건물 뒤에 가려지지 않도록 그려 줌 */
+    for(const n of npcs){
+      if(n.kind==='bear'||n.kind==='bunny'||n.kind==='cat'){
+        animal(n.x,n.y,{
+          kind:n.kind,
+          color:n.skin,
+          clothes:n.clothes
+        },walk*.5,1.05);
+      }else{
+        person(n.x,n.y,{
+          skin:n.skin,
+          hair:n.hair,
+          clothes:n.clothes,
+          accent:'#f9ead1'
+        },walk*.4,1,1.05);
+      }
+
+      rr(n.x-38,n.y-52,76,20,8,'#fffaf0ef');
+      text(n.name,n.x,n.y-38,11);
+
+      const r=nearest();
+      if(r&&r.npc===n&&r.dist<90&&!backdrop.classList.contains('open')){
+        rr(n.x-43,n.y-79,86,23,9,'#fffdf5');
+        text('E  대화하기',n.x,n.y-64,12);
+      }
+    }
+
+    /* 펫 */
+    const spec=petSpec();
+    animal(pet.x,pet.y,spec,walk*.7,1.02);
+    if(petName)text(petName,pet.x,pet.y-42,11);
+
+    /* 내 캐릭터는 마지막에 그려 항상 보이도록 함 */
+    person(player.x,player.y,{
       skin:'#f0c9ac',
       hair:activeCharacter.hair||'#76564f',
       clothes:activeCharacter.outfit||'#e9a9c1',
       accent:activeCharacter.accent||'#f5d99a'
-    },
-    walk,player.face,1.08
-  );
-  text(activeCharacter.name||'몽글이',player.x,player.y-45,11);
+    },walk,player.face,1.08);
 
-  ctx.restore();
-  requestAnimationFrame(render)
+    text(activeCharacter.name||'몽글이',player.x,player.y-45,11);
+
+    ctx.restore();
+  }catch(err){
+    ctx.restore();
+    say('⚠️ 탐험 화면 오류: '+(err&&err.message?err.message:String(err)));
+    console.error('몽글몽글 타운 렌더링 오류:',err);
+  }
+
+  requestAnimationFrame(render);
 }
 
 window.addEventListener('keydown',e=>{
   const k=e.key;
-  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(k))e.preventDefault();
+
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(k)){
+    e.preventDefault();
+  }
 
   if(backdrop.classList.contains('open')){
     if(k==='Escape')closeDialogue();
     else if(k==='Enter'||k==='e'||k==='E')nextDialogue();
-    return
+    return;
   }
 
   keys[k]=true;
-  if((k==='e'||k==='E')&&!e.repeat)talk()
+  if((k==='e'||k==='E')&&!e.repeat)talk();
 });
 
 window.addEventListener('keyup',e=>{keys[e.key]=false});
@@ -571,23 +804,29 @@ document.querySelectorAll('[data-move]').forEach(btn=>{
   const start=e=>{
     e.preventDefault();
     held=btn.dataset.move;
-    canvas.focus()
+    canvas.focus();
   };
+
   const stop=e=>{
     e.preventDefault();
-    if(held===btn.dataset.move)held=''
+    if(held===btn.dataset.move)held='';
   };
+
   btn.addEventListener('pointerdown',start);
   btn.addEventListener('pointerup',stop);
   btn.addEventListener('pointercancel',stop);
-  btn.addEventListener('pointerleave',stop)
+  btn.addEventListener('pointerleave',stop);
 });
 
 document.getElementById('talk').addEventListener('click',talk);
 document.getElementById('reset').addEventListener('click',reset);
 document.getElementById('closeDialog').addEventListener('click',closeDialogue);
 document.getElementById('nextDialog').addEventListener('click',nextDialogue);
-backdrop.addEventListener('click',e=>{if(e.target===backdrop)closeDialogue()});
+
+backdrop.addEventListener('click',e=>{
+  if(e.target===backdrop)closeDialogue();
+});
+
 canvas.addEventListener('pointerdown',()=>canvas.focus());
 
 window.addEventListener('message',e=>{
@@ -597,30 +836,40 @@ window.addEventListener('message',e=>{
   if(d.type==='streamlit:render'){
     const a=d.args||{};
 
-    if(a.active_character&&typeof a.active_character==='object')
+    if(a.active_character&&typeof a.active_character==='object'){
       activeCharacter={...activeCharacter,...a.active_character};
+    }
 
     if(typeof a.pet_emoji==='string')petEmoji=a.pet_emoji;
     if(typeof a.pet_name==='string')petName=a.pet_name;
 
-    if(Number.isFinite(a.berry_count))
+    if(Number.isFinite(a.berry_count)){
       berryLabel.textContent='🍓 누적 열매 '+a.berry_count+'개';
+    }
 
-    window.parent.postMessage(
-      {isStreamlitMessage:true,type:'streamlit:setFrameHeight',height:760},
-      '*'
-    )
+    window.parent.postMessage({
+      isStreamlitMessage:true,
+      type:'streamlit:setFrameHeight',
+      height:760
+    },'*');
   }
 });
 
-window.parent.postMessage(
-  {isStreamlitMessage:true,type:'streamlit:componentReady',apiVersion:1},
-  '*'
-);
-window.parent.postMessage(
-  {isStreamlitMessage:true,type:'streamlit:setFrameHeight',height:760},
-  '*'
-);
+window.addEventListener('error',e=>{
+  say('⚠️ 탐험 화면 오류: '+(e.message||'알 수 없는 오류')+' · index.html 코드를 확인해 줘.');
+});
+
+window.parent.postMessage({
+  isStreamlitMessage:true,
+  type:'streamlit:componentReady',
+  apiVersion:1
+},'*');
+
+window.parent.postMessage({
+  isStreamlitMessage:true,
+  type:'streamlit:setFrameHeight',
+  height:760
+},'*');
 
 berryLabel.textContent='🍓 열매 '+berryCount+'개';
 requestAnimationFrame(render);
