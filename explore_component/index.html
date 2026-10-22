@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="ko">
 <head>
@@ -6,9 +7,7 @@
 <style>
 :root {
   --ink: #62536f;
-  --cream: #fff8ef;
   --pink: #ffdce8;
-  --green: #c8edc9;
 }
 * { box-sizing: border-box; }
 html, body {
@@ -16,16 +15,16 @@ html, body {
   padding: 0;
   background: transparent;
   color: var(--ink);
-  font-family: system-ui, 'Noto Sans KR', sans-serif;
+  font-family: system-ui, "Noto Sans KR", sans-serif;
 }
-.wrap { width: 100%; padding: 0; }
+.wrap { width: 100%; }
 .hud {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  flex-wrap: wrap;
-  padding: 10px 12px;
+  padding: 10px;
   background: #fffdf9;
   border: 1px solid #f3e3e8;
   border-radius: 16px 16px 0 0;
@@ -34,12 +33,11 @@ html, body {
 .pill {
   background: #ffedf3;
   border-radius: 999px;
-  padding: 6px 11px;
+  padding: 6px 10px;
 }
 .stage {
-  position: relative;
   overflow: hidden;
-  border: 2px solid #fff;
+  border: 2px solid white;
   border-radius: 0 0 18px 18px;
   box-shadow: 0 8px 24px #9d8baa25;
   background: #bfe9c3;
@@ -49,6 +47,7 @@ canvas {
   width: 100%;
   height: auto;
   touch-action: none;
+  outline: none;
 }
 .controls {
   display: flex;
@@ -57,42 +56,32 @@ canvas {
   flex-wrap: wrap;
   padding: 10px 4px 4px;
 }
-.controls button {
+button {
   border: 1px solid #f0dce5;
   border-radius: 13px;
-  background: linear-gradient(180deg, #fff, #fff3f7);
+  background: linear-gradient(#fff, #fff3f7);
   color: #6c5a76;
-  padding: 9px 14px;
+  padding: 10px 14px;
   font-size: 15px;
   font-weight: 750;
   cursor: pointer;
   box-shadow: 0 3px 0 #e9d4df;
-  user-select: none;
+  touch-action: manipulation;
 }
-.controls button:active {
-  transform: translateY(2px);
-  box-shadow: 0 1px 0 #e9d4df;
-  background: #ffe2ec;
-}
+button:active { transform: translateY(2px); }
 .msg {
-  min-height: 34px;
+  min-height: 36px;
   background: #fff5dc;
   border: 1px solid #f7e8b7;
   border-radius: 12px;
-  padding: 8px 11px;
+  padding: 9px 11px;
   font-size: 13px;
   margin-top: 7px;
 }
-.hint {
-  font-size: 12px;
-  color: #95869a;
-  padding: 8px 2px;
-}
-.mobile { display: none; }
-@media (max-width: 600px) {
-  .mobile { display: block; }
+.hint { font-size: 12px; color: #95869a; padding: 8px 2px; }
+@media(max-width:600px) {
   .hud { font-size: 11px; }
-  .controls button { padding: 10px 12px; }
+  button { padding: 11px 12px; }
 }
 </style>
 </head>
@@ -100,8 +89,8 @@ canvas {
 <div class="wrap">
   <div class="hud">
     <span class="pill">🌼 몽글마을 산책</span>
-    <span id="berry">🍓 누적 몽글열매: 0</span>
-    <span class="pill">이동: 방향키 / WASD · 말걸기: E</span>
+    <span id="berry">🍓 몽글열매: 0</span>
+    <span class="pill">이동: 방향키 / WASD · 대화: E</span>
   </div>
 
   <div class="stage">
@@ -114,326 +103,552 @@ canvas {
     <button data-move="left">◀</button>
     <button data-move="down">▼</button>
     <button data-move="right">▶</button>
-    <button id="talk">💬 E 말걸기</button>
+    <button id="talk">💬 말걸기</button>
     <button id="reset">↺ 광장으로</button>
   </div>
 
   <div id="message" class="msg">
     안녕! 마을을 탐험하고 반짝이는 딸기를 주워 봐.
-    입양한 펫은 네 뒤를 졸졸 따라올 거야!
   </div>
-
   <div class="hint">
-    ✨ 열매를 주우면 마을 코인 +10, 경험치 +3을 받아.
-    키보드가 반응하지 않으면 게임 화면을 한 번 클릭해 줘.
+    ✨ 딸기를 주우면 코인 +10, 경험치 +3 이벤트를 보냅니다.
+    키보드가 반응하지 않으면 게임 화면을 클릭해 주세요.
   </div>
 </div>
 
 <script>
 (() => {
-  const canvas = document.getElementById('game');
-  const ctx = canvas.getContext('2d');
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  const berryLabel = document.getElementById("berry");
+  const message = document.getElementById("message");
 
-  const VW = 960, VH = 590, MW = 1700, MH = 1250;
-  let keys = {}, lastTime = 0, seq = 0;
+  const W = 960, H = 590, MW = 1700, MH = 1250;
+  const SAVE_KEY = "mongle_explore_v3";
 
-  let props = {
-    pet_emoji: '',
-    pet_name: '',
-    berry_count: 0,
-    active_character: {
-      name: '몽글이',
-      hair: '#76564f',
-      outfit: '#ffb7cf',
-      accent: '#ffe6a7'
-    }
+  let keys = {};
+  let heldDirection = "";
+  let lastTime = 0;
+  let walking = 0;
+  let berryCount = 0;
+  let eventId = 0;
+  let activeCharacter = {
+    name: "몽글이",
+    hair: "#76564f",
+    outfit: "#ffb7cf",
+    accent: "#ffe6a7"
   };
+  let petEmoji = "";
+  let petName = "";
 
-  const msg = document.getElementById('message');
-
-  const load = () => {
-    try {
-      return JSON.parse(localStorage.getItem('mongle_explore_v2') || '{}');
-    } catch (e) {
-      return {};
-    }
-  };
-
-  const saved = load();
-
-  const player = {
-    x: 760, y: 610,
-    vx: 0, vy: 0,
-    face: 1,
-    walk: 0
-  };
-
-  if (
-    saved.player &&
-    Number.isFinite(saved.player.x) &&
-    Number.isFinite(saved.player.y)
-  ) {
-    player.x = saved.player.x;
-    player.y = saved.player.y;
+  function readSave() {
+    try { return JSON.parse(localStorage.getItem(SAVE_KEY) || "{}"); }
+    catch (_) { return {}; }
   }
 
-  let pet = { x: player.x - 34, y: player.y + 18 };
+  const saved = readSave();
+  const player = {
+    x: Number.isFinite(saved.x) ? saved.x : 760,
+    y: Number.isFinite(saved.y) ? saved.y : 610,
+    face: 1
+  };
+  const pet = { x: player.x - 35, y: player.y + 18 };
 
   const berrySpots = [
-    [220,210], [430,300], [720,180], [1050,230],
-    [1420,300], [1320,620], [1070,870], [740,1000],
-    [360,850], [1550,1030], [880,430], [550,620]
+    [220,210],[430,300],[720,180],[1050,230],
+    [1420,300],[1320,620],[1070,870],[740,1000],
+    [360,850],[1550,1030],[880,430],[550,620]
   ];
-
-  const got = new Set(saved.got || []);
-  const berries = [];
-
-  berrySpots.forEach((p, i) => {
-    berries.push({
-      x: p[0],
-      y: p[1],
-      id: i,
-      got: got.has(i),
-      phase: Math.random() * 6.28
-    });
-  });
+  const collected = new Set(
+    Array.isArray(saved.got) ? saved.got : []
+  );
+  const berries = berrySpots.map((p, i) => ({
+    x: p[0], y: p[1], id: i,
+    got: collected.has(i),
+    phase: Math.random() * Math.PI * 2
+  }));
 
   const npcs = [
     {
-      x: 640, y: 570,
-      name: '콩이', emoji: '🐻',
-      line: '오늘은 딸기를 열 개 모아 보는 건 어때? 하나 주울 때마다 코인도 받을 수 있어!'
+      x:640,y:570,name:"콩이",emoji:"🐻",
+      line:"안녕! 딸기를 모으면 코인과 경험치도 받을 수 있어!"
     },
     {
-      x: 1120, y: 510,
-      name: '구름 할머니', emoji: '👵🏻',
-      line: '연못 옆 꽃길은 내가 가장 좋아하는 산책길이란다.'
+      x:1120,y:510,name:"구름 할머니",emoji:"👵🏻",
+      line:"연못 옆 꽃길은 내가 가장 좋아하는 산책길이란다."
     },
     {
-      x: 920, y: 760,
-      name: '토리', emoji: '🐰',
-      line: '네 펫이랑 같이 산책하니까 더 신나지? 저기 반짝이는 딸기도 찾아봐!'
+      x:920,y:760,name:"토리",emoji:"🐰",
+      line:"펫과 함께 산책해 봐! 반짝이는 딸기도 찾아봐."
+    },
+    {
+      x:350,y:570,name:"별이",emoji:"🐱",
+      line:"꽃집에 들렀다가 마을을 한 바퀴 돌아보는 건 어때?"
     }
   ];
 
-  const trees = [];
+  const buildings = [
+    {x:440,y:360,w:150,h:118,wall:"#fff0d9",roof:"#f3a6bf",name:"딸기 빵집",icon:"🥐"},
+    {x:1110,y:370,w:155,h:118,wall:"#fff5ce",roof:"#d5b4ec",name:"포근 카페",icon:"☕"},
+    {x:770,y:820,w:150,h:116,wall:"#ffe7ed",roof:"#eea7bd",name:"작은 집",icon:"🏡"},
+    {x:1330,y:830,w:150,h:116,wall:"#e7e1ff",roof:"#b8b5f1",name:"별빛 도서관",icon:"📚"},
+    {x:250,y:700,w:125,h:96,wall:"#fff5e8",roof:"#f6cc8b",name:"꽃집",icon:"🌷"}
+  ];
+  const pond = {x:1280,y:650,rx:145,ry:85};
 
-  for (let y = 90; y < MH; y += 190) {
-    for (
-      let x = 90 + (Math.floor(y / 190) % 2) * 60;
-      x < MW;
-      x += 220
-    ) {
-      if (!(
-        (x > 350 && x < 600 && y > 220 && y < 420) ||
-        (x > 850 && x < 1200 && y > 280 && y < 520) ||
-        (x > 650 && x < 980 && y > 680 && y < 930)
-      )) {
+  const trees = [];
+  for (let y=90; y<MH; y+=190) {
+    for (let x=90+(Math.floor(y/190)%2)*60; x<MW; x+=220) {
+      if (!((x>350&&x<600&&y>220&&y<420) ||
+            (x>850&&x<1200&&y>280&&y<520) ||
+            (x>650&&x<980&&y>680&&y<930))) {
         trees.push({
-          x: x + (Math.sin(x * y) * 22),
-          y: y + (Math.cos(x + y) * 18),
-          scale: 0.8 + ((x + y) % 5) * 0.07
+          x:x+Math.sin(x*y)*22,
+          y:y+Math.cos(x+y)*18,
+          scale:0.8+((x+y)%5)*0.07
         });
       }
     }
   }
 
   const flowers = [];
-
-  for (let i = 0; i < 160; i++) {
+  for (let i=0;i<160;i++) {
     flowers.push({
-      x: (i * 193 + 41) % MW,
-      y: (i * 127 + 77) % MH,
-      r: 2 + (i % 3),
-      h: i % 5
+      x:(i*193+41)%MW,
+      y:(i*127+77)%MH,
+      r:2+(i%3),
+      h:i%5
     });
   }
 
-  const buildings = [
-    {
-      x: 440, y: 360, w: 150, h: 118,
-      wall: '#fff0d9', roof: '#f3a6bf',
-      name: '딸기 빵집', icon: '🥐', door: '#b98578'
-    },
-    {
-      x: 1110, y: 370, w: 155, h: 118,
-      wall: '#fff5ce', roof: '#d5b4ec',
-      name: '포근 카페', icon: '☕', door: '#b98578'
-    },
-    {
-      x: 770, y: 820, w: 150, h: 116,
-      wall: '#ffe7ed', roof: '#eea7bd',
-      name: '작은 집', icon: '🏡', door: '#b98578'
-    },
-    {
-      x: 1330, y: 830, w: 150, h: 116,
-      wall: '#e7e1ff', roof: '#b8b5f1',
-      name: '별빛 도서관', icon: '📚', door: '#b98578'
-    },
-    {
-      x: 250, y: 700, w: 125, h: 96,
-      wall: '#fff5e8', roof: '#f6cc8b',
-      name: '꽃집', icon: '🌷', door: '#b98578'
-    }
-  ];
-
-  const pond = { x: 1280, y: 650, rx: 145, ry: 85 };
-
   function save() {
-    localStorage.setItem(
-      'mongle_explore_v2',
-      JSON.stringify({
-        player: { x: player.x, y: player.y },
-        got: [...got]
-      })
-    );
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify({
+        x:player.x, y:player.y, got:[...collected]
+      }));
+    } catch (_) {}
   }
 
-  function post(value) {
+  // Streamlit에 탐험 이벤트 전달
+  function sendEvent(type, extra={}) {
+    eventId++;
+    const value = {
+      type,
+      event: type,
+      event_id: eventId,
+      berry_count: berryCount,
+      ...extra
+    };
     window.parent.postMessage({
-      isStreamlitMessage: true,
-      type: 'streamlit:setComponentValue',
+      isStreamlitMessage:true,
+      type:"streamlit:setComponentValue",
       value,
-      dataType: 'json'
-    }, '*');
+      dataType:"json"
+    }, "*");
   }
 
-  function rounded(x, y, w, h, r, color) {
+  function setMessage(text) {
+    message.textContent = text;
+  }
+
+  function roundRect(x,y,w,h,r,color) {
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.roundRect(x, y, w, h, r);
+    ctx.roundRect(x,y,w,h,r);
     ctx.fill();
   }
 
-  function label(t, x, y, size = 15, color = '#665770', align = 'center') {
-    ctx.font = `${size}px system-ui, 'Noto Sans KR', sans-serif`;
+  function label(text,x,y,size=15,color="#665770") {
+    ctx.font = `${size}px system-ui, sans-serif`;
     ctx.fillStyle = color;
-    ctx.textAlign = align;
-    ctx.fillText(t, x, y);
+    ctx.textAlign = "center";
+    ctx.fillText(text,x,y);
   }
 
-  function drawTree(x, y, s = 1) {
+  function drawTree(x,y,s=1) {
     ctx.save();
-    ctx.translate(x, y);
-    ctx.scale(s, s);
-
-    ctx.fillStyle = '#b7a087';
-    ctx.fillRect(-6, 3, 12, 26);
-
-    ctx.fillStyle = '#a6d99c';
+    ctx.translate(x,y);
+    ctx.scale(s,s);
+    ctx.fillStyle="#b7a087";
+    ctx.fillRect(-6,3,12,26);
+    ctx.fillStyle="#a6d99c";
     ctx.beginPath();
-    ctx.arc(0, -8, 27, 0, Math.PI * 2);
+    ctx.arc(0,-8,27,0,Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle="#8dce94";
+    ctx.beginPath();
+    ctx.arc(-15,1,20,0,Math.PI*2);
+    ctx.arc(15,1,20,0,Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle="#bde7a8";
+    ctx.beginPath();
+    ctx.arc(-6,-18,10,0,Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawFlower(x,y,r,h) {
+    const colors=["#fff2a8","#fffaff","#e6c1ff","#ffb9d2","#b9e8f1"];
+    ctx.strokeStyle="#7fbe7f";
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.moveTo(x,y+4);
+    ctx.lineTo(x,y+12);
+    ctx.stroke();
+    for(let a=0;a<5;a++) {
+      ctx.fillStyle=colors[h%colors.length];
+      ctx.beginPath();
+      ctx.arc(
+        x+Math.cos(a*1.256)*r*.85,
+        y+Math.sin(a*1.256)*r*.85,
+        r*.65,0,Math.PI*2
+      );
+      ctx.fill();
+    }
+    ctx.fillStyle="#f4d66b";
+    ctx.beginPath();
+    ctx.arc(x,y,r*.45,0,Math.PI*2);
+    ctx.fill();
+  }
+
+  function drawHouse(b) {
+    const x=b.x,y=b.y;
+    ctx.fillStyle="#ad987e33";
+    ctx.beginPath();
+    ctx.ellipse(x+b.w/2,y+b.h+8,b.w*.55,13,0,0,Math.PI*2);
     ctx.fill();
 
-    ctx.fillStyle = '#8dce94';
+    roundRect(x,y+22,b.w,b.h-22,16,b.wall);
+    ctx.fillStyle=b.roof;
     ctx.beginPath();
-    ctx.arc(-15, 1, 20, 0, Math.PI * 2);
-    ctx.arc(15, 1, 20, 0, Math.PI * 2);
+    ctx.moveTo(x-12,y+28);
+    ctx.lineTo(x+b.w/2,y-30);
+    ctx.lineTo(x+b.w+12,y+28);
+    ctx.closePath();
     ctx.fill();
 
-    ctx.fillStyle = '#bde7a8';
+    roundRect(x+18,y+48,30,28,7,"#c6eaf3");
+    roundRect(x+b.w-48,y+48,30,28,7,"#c6eaf3");
+    roundRect(x+b.w/2-13,y+b.h-37,26,37,8,"#b98578");
+    label(b.icon+" "+b.name,x+b.w/2,y+b.h+30,15);
+  }
+
+  // 전신 캐릭터: 머리, 몸통, 팔, 다리, 신발
+  function drawCharacter(x,y,walk,face,c) {
+    const outfit=c.outfit||"#ffb7cf";
+    const hair=c.hair||"#76564f";
+    const accent=c.accent||"#ffe6a7";
+    const step=Math.sin(walk)*5;
+    const bob=Math.abs(Math.sin(walk))*1.7;
+
+    ctx.save();
+    ctx.translate(x,y+bob);
+    ctx.scale(face<0?-1:1,1);
+
+    // 다리
+    ctx.strokeStyle="#f3c4a6";
+    ctx.lineWidth=5;
+    ctx.lineCap="round";
     ctx.beginPath();
-    ctx.arc(-6, -18, 10, 0, Math.PI * 2);
+    ctx.moveTo(-5,13);ctx.lineTo(-6+step,23);ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(5,13);ctx.lineTo(6-step,23);ctx.stroke();
+
+    // 신발
+    ctx.fillStyle="#fff7ed";
+    ctx.beginPath();ctx.ellipse(-7+step,24,5,3,0,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.ellipse(7-step,24,5,3,0,0,Math.PI*2);ctx.fill();
+
+    // 팔
+    ctx.strokeStyle="#f5c9ac";
+    ctx.lineWidth=6;
+    ctx.beginPath();
+    ctx.moveTo(-12,-5);ctx.lineTo(-17+step,-1);ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(12,-5);ctx.lineTo(17-step,-1);ctx.stroke();
+
+    // 몸통과 옷
+    ctx.fillStyle=outfit;
+    ctx.beginPath();
+    ctx.moveTo(-11,-10);
+    ctx.quadraticCurveTo(-16,-5,-13,10);
+    ctx.lineTo(13,10);
+    ctx.quadraticCurveTo(16,-5,11,-10);
+    ctx.closePath();
     ctx.fill();
+
+    // 옷 장식
+    ctx.fillStyle=accent;
+    ctx.beginPath();ctx.arc(0,-3,3,0,Math.PI*2);ctx.fill();
+
+    // 목과 얼굴
+    ctx.fillStyle="#f7cfb4";
+    ctx.fillRect(-3,-16,6,7);
+    ctx.fillStyle="#ffdfc9";
+    ctx.beginPath();ctx.ellipse(0,-24,13,15,0,0,Math.PI*2);ctx.fill();
+
+    // 머리카락
+    ctx.fillStyle=hair;
+    ctx.beginPath();
+    ctx.arc(0,-29,14,Math.PI,Math.PI*2);
+    ctx.lineTo(13,-21);
+    ctx.quadraticCurveTo(7,-25,5,-31);
+    ctx.quadraticCurveTo(-4,-20,-13,-23);
+    ctx.closePath();
+    ctx.fill();
+
+    // 눈과 미소
+    ctx.fillStyle="#59464b";
+    ctx.beginPath();ctx.arc(-5,-24,1.5,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(5,-24,1.5,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle="#a96e76";
+    ctx.lineWidth=1.3;
+    ctx.beginPath();ctx.arc(0,-20,3,0.15,Math.PI-0.15);ctx.stroke();
 
     ctx.restore();
   }
 
-  function drawHouse(b) {
-    const x = b.x, y = b.y;
-
-    ctx.fillStyle = '#ad987e33';
-    ctx.beginPath();
-    ctx.ellipse(x + b.w / 2, y + b.h + 8, b.w * 0.55, 13, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    rounded(x, y + 22, b.w, b.h - 22, 16, b.wall);
-
-    ctx.fillStyle = b.roof;
-    ctx.beginPath();
-    ctx.moveTo(x - 12, y + 28);
-    ctx.lineTo(x + b.w / 2, y - 30);
-    ctx.lineTo(x + b.w + 12, y + 28);
-    ctx.closePath();
-    ctx.fill();
-
-    rounded(x + 18, y + 48, 30, 28, 7, '#c6eaf3');
-    rounded(x + b.w - 48, y + 48, 30, 28, 7, '#c6eaf3');
-    rounded(x + b.w / 2 - 13, y + b.h - 37, 26, 37, 8, b.door);
-
-    ctx.fillStyle = '#fff8e9';
-    ctx.beginPath();
-    ctx.ellipse(x + b.w / 2, y + b.h + 8, b.w * 0.68, 15, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    label(b.icon + ' ' + b.name, x + b.w / 2, y + b.h + 13, 15, '#65546e');
+  function drawNPC(n) {
+    ctx.save();
+    ctx.font="28px sans-serif";
+    ctx.textAlign="center";
+    ctx.fillText(n.emoji,n.x,n.y);
+    roundRect(n.x-35,n.y-47,70,20,8,"#fffdf0");
+    label(n.name,n.x,n.y-33,11);
+    ctx.restore();
   }
 
-  function drawFlower(x, y, r, h) {
-    const colors = ['#fff2a8', '#fffaff', '#e6c1ff', '#ffb9d2', '#b9e8f1'];
+  function collectBerry(b) {
+    b.got=true;
+    collected.add(b.id);
+    berryCount++;
+    berryLabel.textContent="🍓 몽글열매: "+berryCount;
+    setMessage("🍓 딸기를 주웠어! 코인 +10, 경험치 +3");
+    sendEvent("berry_collected",{
+      berry_id:b.id,
+      coins:10,
+      exp:3,
+      berry_count:berryCount
+    });
+    save();
+  }
 
-    ctx.strokeStyle = '#7fbe7f';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(x, y + 4);
-    ctx.lineTo(x, y + 12);
-    ctx.stroke();
+  function nearestNPC() {
+    let nearest=null, dist=Infinity;
+    for(const n of npcs) {
+      const d=Math.hypot(player.x-n.x,player.y-n.y);
+      if(d<75&&d<dist) { nearest=n;dist=d; }
+    }
+    return nearest;
+  }
 
-    for (let a = 0; a < 5; a++) {
-      ctx.fillStyle = colors[h % colors.length];
-      ctx.beginPath();
-      ctx.arc(
-        x + Math.cos(a * 1.256) * r * 0.85,
-        y + Math.sin(a * 1.256) * r * 0.85,
-        r * 0.65,
-        0,
-        Math.PI * 2
-      );
-      ctx.fill();
+  function talk() {
+    const n=nearestNPC();
+    if(!n) {
+      setMessage("주변에 말을 걸 수 있는 친구가 없어. NPC 가까이 가 봐!");
+      return;
+    }
+    setMessage(n.name+": "+n.line);
+    sendEvent("npc_talk",{npc_name:n.name,message:n.line});
+  }
+
+  function moveToPlaza() {
+    player.x=760;player.y=610;
+    pet.x=player.x-35;pet.y=player.y+18;
+    save();
+    setMessage("🌼 광장으로 돌아왔어!");
+    canvas.focus();
+  }
+
+  function update(dt) {
+    let dx=0,dy=0;
+    if(keys.ArrowUp||keys.w||keys.W||heldDirection==="up")dy--;
+    if(keys.ArrowDown||keys.s||keys.S||heldDirection==="down")dy++;
+    if(keys.ArrowLeft||keys.a||keys.A||heldDirection==="left")dx--;
+    if(keys.ArrowRight||keys.d||keys.D||heldDirection==="right")dx++;
+
+    const length=Math.hypot(dx,dy)||1;
+    dx/=length;dy/=length;
+    const speed=210;
+    player.x=Math.max(25,Math.min(MW-25,player.x+dx*speed*dt));
+    player.y=Math.max(35,Math.min(MH-25,player.y+dy*speed*dt));
+
+    if(dx!==0)player.face=dx<0?-1:1;
+    if(dx||dy)walking+=dt*10;
+
+    const pd=Math.hypot(player.x-pet.x,player.y-pet.y);
+    if(pd>35) {
+      pet.x+=(player.x-pet.x)/pd*Math.min(pd-28,150*dt);
+      pet.y+=(player.y-pet.y)/pd*Math.min(pd-28,150*dt);
     }
 
-    ctx.fillStyle = '#f4d66b';
-    ctx.beginPath();
-    ctx.arc(x, y, r * 0.45, 0, Math.PI * 2);
-    ctx.fill();
+    for(const b of berries) {
+      if(!b.got&&Math.hypot(player.x-b.x,player.y-b.y)<28) {
+        collectBerry(b);
+      }
+    }
   }
 
-  // 머리, 몸통, 팔, 다리, 신발이 있는 전신 캐릭터
-  function drawPlayer(x, y, walk, face, character) {
-    const outfit = character.outfit || '#ffb7cf';
-    const hair = character.hair || '#76564f';
-    const accent = character.accent || '#ffe6a7';
+  function render(now) {
+    const dt=Math.min((now-lastTime)/1000||0,0.04);
+    lastTime=now;
+    update(dt);
 
-    const step = Math.sin(walk) * 5;
-    const bob = Math.abs(Math.sin(walk)) * 1.7;
+    const camX=Math.max(0,Math.min(MW-W,player.x-W/2));
+    const camY=Math.max(0,Math.min(MH-H,player.y-H/2));
 
+    ctx.clearRect(0,0,W,H);
     ctx.save();
-    ctx.translate(x, y + bob);
-    ctx.scale(face < 0 ? -1 : 1, 1);
+    ctx.translate(-camX,-camY);
 
-    // 다리와 신발
-    ctx.strokeStyle = '#f3c4a6';
-    ctx.lineWidth = 5;
-    ctx.lineCap = 'round';
+    // 잔디
+    ctx.fillStyle="#c9edc5";
+    ctx.fillRect(0,0,MW,MH);
 
+    // 잔디 무늬
+    for(let i=0;i<flowers.length;i++) {
+      const f=flowers[i];
+      drawFlower(f.x,f.y,f.r,f.h);
+    }
+
+    // 산책길
+    ctx.strokeStyle="#f5e6c9";
+    ctx.lineWidth=100;
+    ctx.lineCap="round";
     ctx.beginPath();
-    ctx.moveTo(-5, 13);
-    ctx.lineTo(-6 + step, 23);
+    ctx.moveTo(60,600);
+    ctx.bezierCurveTo(400,530,550,680,850,600);
+    ctx.bezierCurveTo(1100,520,1200,650,1630,570);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(800,100);
+    ctx.bezierCurveTo(750,400,930,520,850,1200);
     ctx.stroke();
 
+    // 연못
+    ctx.fillStyle="#8ed6e7";
     ctx.beginPath();
-    ctx.moveTo(5, 13);
-    ctx.lineTo(6 - step, 23);
+    ctx.ellipse(pond.x,pond.y,pond.rx,pond.ry,0,0,Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle="#c9f1f5";
+    ctx.lineWidth=5;
+    ctx.beginPath();
+    ctx.ellipse(pond.x,pond.y,pond.rx-12,pond.ry-10,0,0,Math.PI*2);
     ctx.stroke();
+    label("🪷 연못",pond.x,pond.y+7,18);
 
-    ctx.fillStyle = '#fff7ed';
-    ctx.beginPath();
-    ctx.ellipse(-7 + step, 24, 5, 3, 0, 0, Math.PI * 2);
-    ctx.fill();
+    for(const b of buildings)drawHouse(b);
+    for(const t of trees)drawTree(t.x,t.y,t.scale);
 
-    ctx.beginPath();
-    ctx.ellipse(7 - step, 24, 5, 3, 0, 0, Math.PI * 2);
-    ctx.fill();
+    // 딸기
+    for(const b of berries) {
+      if(b.got)continue;
+      const pulse=Math.sin(now/280+b.phase)*3;
+      ctx.fillStyle="#fff4b9";
+      ctx.beginPath();
+      ctx.arc(b.x,b.y-3,17+pulse,0,Math.PI*2);
+      ctx.fill();
+      ctx.font="24px sans-serif";
+      ctx.textAlign="center";
+      ctx.fillText("🍓",b.x,b.y+6);
+    }
 
-    // 팔 흔들기
-    ctx.strokeStyle = '#f5c9ac';
+    for(const n of npcs)drawNPC(n);
+
+    // 펫과 플레이어
+    if(petEmoji) {
+      ctx.font="27px sans-serif";
+      ctx.textAlign="center";
+      ctx.fillText(petEmoji,pet.x,pet.y);
+      if(petName)label(petName,pet.x,pet.y-22,11);
+    } else {
+      ctx.font="25px sans-serif";
+      ctx.textAlign="center";
+      ctx.fillText("🐾",pet.x,pet.y);
+    }
+
+    drawCharacter(player.x,player.y,walking,player.face,activeCharacter);
+    label(activeCharacter.name||"몽글이",player.x,player.y-43,12);
+
+    // 현재 근처에서 대화할 수 있는 NPC 안내
+    const n=nearestNPC();
+    if(n) {
+      roundRect(player.x-55,player.y-76,110,23,9,"#fffdf0");
+      label("E  말걸기",player.x,player.y-60,12);
+    }
+
+    ctx.restore();
+    requestAnimationFrame(render);
+  }
+
+  // 키보드
+  window.addEventListener("keydown",e=>{
+    const k=e.key;
+    if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(k))e.preventDefault();
+    keys[k]=true;
+    if(k==="e"||k==="E")talk();
+  });
+  window.addEventListener("keyup",e=>{keys[e.key]=false;});
+  window.addEventListener("blur",()=>{keys={};heldDirection="";});
+
+  // 모바일/화면 방향 버튼
+  document.querySelectorAll("[data-move]").forEach(btn=>{
+    const start=e=>{
+      e.preventDefault();
+      heldDirection=btn.dataset.move;
+      canvas.focus();
+    };
+    const stop=e=>{
+      e.preventDefault();
+      if(heldDirection===btn.dataset.move)heldDirection="";
+    };
+    btn.addEventListener("pointerdown",start);
+    btn.addEventListener("pointerup",stop);
+    btn.addEventListener("pointercancel",stop);
+    btn.addEventListener("pointerleave",stop);
+  });
+
+  document.getElementById("talk").addEventListener("click",talk);
+  document.getElementById("reset").addEventListener("click",moveToPlaza);
+  canvas.addEventListener("pointerdown",()=>canvas.focus());
+
+  // Streamlit에서 전달한 캐릭터 및 펫 설정 읽기
+  window.addEventListener("message",e=>{
+    const d=e.data;
+    if(!d||typeof d!=="object")return;
+
+    if(d.type==="streamlit:render") {
+      const a=d.args||{};
+      if(a.active_character&&typeof a.active_character==="object") {
+        activeCharacter={...activeCharacter,...a.active_character};
+      }
+      if(typeof a.pet_emoji==="string")petEmoji=a.pet_emoji;
+      if(typeof a.pet_name==="string")petName=a.pet_name;
+
+      // 현재 Streamlit 버전의 component protocol에 맞춰 높이 알림
+      window.parent.postMessage({
+        isStreamlitMessage:true,
+        type:"streamlit:setFrameHeight",
+        height:700
+      },"*");
+    }
+  });
+
+  // 초기 화면 높이 및 게임 시작
+  window.parent.postMessage({
+    isStreamlitMessage:true,
+    type:"streamlit:componentReady",
+    apiVersion:1
+  },"*");
+  window.parent.postMessage({
+    isStreamlitMessage:true,
+    type:"streamlit:setFrameHeight",
+    height:700
+  },"*");
+
+  berryLabel.textContent="🍓 몽글열매: "+berryCount;
+  requestAnimationFrame(render);
+})();
+</script>
+</body>
+</html>
