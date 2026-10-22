@@ -4,6 +4,7 @@ import time
 import json
 import secrets
 import requests
+import streamlit.components.v1 as components
 from datetime import datetime
 
 st.set_page_config(page_title="몽글몽글 타운", page_icon="🏡", layout="wide")
@@ -159,7 +160,6 @@ def town_level():
     return 1 + xp // 100
 
 def update_level():
-        
     new_level = town_level()
     if new_level > st.session_state.level:
         st.session_state.level = new_level
@@ -259,6 +259,7 @@ with st.sidebar:
             del st.session_state[key]
         st.rerun()
     st.caption("※ 새 게임을 시작하면 현재 진행 상황이 초기화돼.")
+
 # 지표
 cols = st.columns(4)
 stats = [
@@ -275,7 +276,63 @@ st.progress(min(1.0, (st.session_state.xp % 100) / 100), text=f"다음 레벨까
 st.markdown(f'<div class="notice">💰 건물 수익: <b>{get_income()} 코인</b> / 15초 · 건물을 짓고 마을을 발전시켜 보자!</div>', unsafe_allow_html=True)
 st.write("")
 
-tab_town, tab_build, tab_pet, tab_quest, tab_book = st.tabs(["🌼 우리 마을", "🛠️ 건설하기", "🐾 펫 돌보기", "📜 퀘스트", "🏆 도감·기록"])
+tab_explore, tab_town, tab_build, tab_pet, tab_quest, tab_book = st.tabs(["🕹️ 마을 탐험", "🌼 우리 마을", "🛠️ 건설하기", "🐾 펫 돌보기", "📜 퀘스트", "🏆 도감·기록"])
+
+with tab_explore:
+    st.subheader("🌷 직접 걸어 다니는 몽글마을")
+    st.caption("키보드 방향키 또는 WASD로 움직여 봐! 반짝이는 열매에 가까이 가면 자동으로 줍고, 주민 옆에서 E를 누르면 이야기를 나눌 수 있어.")
+    game_html = r'''<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+*{box-sizing:border-box}body{margin:0;background:#fff8f2;font-family:system-ui,'Noto Sans KR',sans-serif;color:#62556d}.wrap{max-width:100%;margin:auto}.hud{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:8px 10px;background:#fffdf8;border:1px solid #f4e3e8;border-radius:14px 14px 0 0;font-size:13px}.pill{background:#ffedf2;padding:6px 10px;border-radius:999px}.stage{position:relative;border:2px solid #fff;border-radius:0 0 16px 16px;overflow:hidden;box-shadow:0 5px 18px #b99bb322;background:#ccefcf}canvas{display:block;width:100%;height:auto;image-rendering:auto;touch-action:none}.hint{font-size:12px;color:#8c7c91;padding:8px 2px}.controls{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;padding:4px}.controls button{border:1px solid #efd9e2;border-radius:12px;background:#fff;color:#6d5b74;padding:9px 14px;font-size:16px;font-weight:700;cursor:pointer}.controls button:active{background:#ffdce7}.msg{min-height:26px;background:#fff5dc;border-radius:10px;padding:7px 10px;font-size:13px;margin-top:6px}
+</style></head><body><div class="wrap"><div class="hud"><span class="pill">🌼 몽글마을 산책</span><span id="berry">🍓 찾은 몽글열매: 0</span><span class="pill">이동: 방향키 / WASD · 말걸기: E</span></div><div class="stage"><canvas id="game" width="960" height="560" aria-label="몽글마을 탐험 게임"></canvas></div><div class="controls"><button data-move="up">▲</button><button data-move="left">◀</button><button data-move="down">▼</button><button data-move="right">▶</button><button id="talk">💬 E 말걸기</button><button id="reset">↺ 위치 초기화</button></div><div id="message" class="msg">안녕! 마을 곳곳을 걸어 다니며 반짝이는 몽글열매를 찾아봐.</div><div class="hint">※ 이 탐험 화면은 현재 브라우저 안에서 움직이는 미니게임이야. 찾은 열매와 위치는 이 브라우저에 저장되며, 코인·펫·퀘스트·클라우드 저장은 아래 마을 관리 메뉴에서 이용할 수 있어.</div></div>
+<script>
+(()=>{
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+const W=960,H=560; let player={x:465,y:300}; let keys={}; let moving=false;
+const msg=document.getElementById('message');
+let saved={};try{saved=JSON.parse(localStorage.getItem('mongle_explore_v1')||'{}')}catch(e){}
+if(saved.player&&Number.isFinite(saved.player.x)&&Number.isFinite(saved.player.y)) player=saved.player;
+let berries=[{x:150,y:170},{x:340,y:110},{x:780,y:160},{x:835,y:360},{x:300,y:435},{x:610,y:455},{x:510,y:205},{x:115,y:365}].map((b,i)=>({...b,id:i,got:(saved.got||[]).includes(i)}));
+const npcs=[{x:510,y:330,name:'토리',emoji:'🐰',line:'꽃밭 옆 열매는 달콤하대! 반짝이는 곳을 찾아봐.'},{x:740,y:285,name:'구름 할머니',emoji:'👵🏻',line:'산책할 때 나무와 꽃도 천천히 구경해 보렴.'},{x:250,y:285,name:'콩이',emoji:'🐻',line:'안녕! 오늘은 마을을 한 바퀴 돌아보는 게 어때?'}];
+const trees=[{x:70,y:85},{x:200,y:90},{x:410,y:70},{x:620,y:90},{x:880,y:90},{x:90,y:270},{x:875,y:470},{x:420,y:490},{x:680,y:500},{x:180,y:500},{x:550,y:130},{x:350,y:360}];
+function rounded(x,y,w,h,r,color){ctx.fillStyle=color;ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fill()}
+function text(t,x,y,size=14,color='#675970',align='center'){ctx.font=`${size}px system-ui,'Noto Sans KR',sans-serif`;ctx.fillStyle=color;ctx.textAlign=align;ctx.fillText(t,x,y)}
+function house(x,y,wall,roof,label){rounded(x-42,y-20,84,53,9,wall);ctx.fillStyle=roof;ctx.beginPath();ctx.moveTo(x-52,y-17);ctx.lineTo(x,y-58);ctx.lineTo(x+52,y-17);ctx.closePath();ctx.fill();rounded(x-9,y+2,18,31,5,'#b88776');rounded(x-32,y-7,18,17,4,'#c5e7f4');rounded(x+14,y-7,18,17,4,'#c5e7f4');text(label,x,y+49,13,'#65536b')}
+function tree(x,y){ctx.fillStyle='#a9dba0';ctx.beginPath();ctx.arc(x,y-15,22,0,Math.PI*2);ctx.fill();ctx.fillStyle='#7fc68c';ctx.beginPath();ctx.arc(x-12,y-5,15,0,Math.PI*2);ctx.arc(x+12,y-5,15,0,Math.PI*2);ctx.fill();rounded(x-5,y+1,10,20,4,'#b98c72')}
+function draw(){ctx.clearRect(0,0,W,H);ctx.fillStyle='#ccefcf';ctx.fillRect(0,0,W,H);
+// meadow flecks
+for(let i=0;i<100;i++){let x=(i*137+31)%W,y=(i*83+22)%H;ctx.fillStyle=i%2?'#bce6b7':'#d8f3ca';ctx.beginPath();ctx.arc(x,y,2,0,6.28);ctx.fill()}
+// paths
+ctx.lineCap='round';ctx.strokeStyle='#f6e5c8';ctx.lineWidth=72;ctx.beginPath();ctx.moveTo(-20,300);ctx.bezierCurveTo(220,300,250,350,440,300);ctx.bezierCurveTo(590,250,650,300,980,300);ctx.stroke();ctx.beginPath();ctx.moveTo(460,580);ctx.bezierCurveTo(460,440,430,400,440,300);ctx.stroke();ctx.beginPath();ctx.moveTo(180,300);ctx.bezierCurveTo(180,210,250,210,320,210);ctx.stroke();
+// pond
+ctx.fillStyle='#a8dce8';ctx.beginPath();ctx.ellipse(790,430,92,48,-.15,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#e7fbff';ctx.lineWidth=4;ctx.stroke();ctx.fillStyle='#c9eff2';ctx.beginPath();ctx.ellipse(770,418,26,8,-.2,0,Math.PI*2);ctx.fill();
+// flower beds
+rounded(65,390,135,60,16,'#f6c8d8');for(let i=0;i<12;i++){let x=77+(i%6)*21,y=405+Math.floor(i/6)*22;ctx.fillStyle=['#fff2a8','#fff','#e8b7ff'][i%3];ctx.beginPath();ctx.arc(x,y,6,0,6.28);ctx.fill();ctx.fillStyle='#f5d76c';ctx.beginPath();ctx.arc(x,y,2,0,6.28);ctx.fill()}
+// buildings
+house(310,160,'#fff0dc','#f3a9bd','🍞 빵집');house(680,175,'#fff5cf','#d9b6ed','☕ 포근 카페');house(465,425,'#ffe8ee','#e8a4b7','🏡 작은 집');
+// trees and benches
+for(const t of trees)tree(t.x,t.y);rounded(590,355,56,12,5,'#c79783');rounded(595,345,46,10,5,'#f3d5b5');
+// berries
+for(const b of berries){if(b.got)continue;ctx.fillStyle='#fff6b4';ctx.beginPath();ctx.arc(b.x,b.y,15,0,6.28);ctx.fill();text('🍓',b.x,b.y+7,20);}
+// NPCs
+for(const n of npcs){ctx.fillStyle='#ffffff';ctx.beginPath();ctx.ellipse(n.x,n.y+7,19,8,0,0,6.28);ctx.fill();text(n.emoji,n.x,n.y+4,27);text(n.name,n.x,n.y+26,12,'#65536b');}
+// player shadow and sprite
+ctx.fillStyle='#8ab58a66';ctx.beginPath();ctx.ellipse(player.x,player.y+11,17,7,0,0,6.28);ctx.fill();text('👧🏻',player.x,player.y+7,31);
+// nearest NPC hint
+let near=npcs.find(n=>Math.hypot(n.x-player.x,n.y-player.y)<48);if(near){rounded(near.x-42,near.y-45,84,23,10,'#fffdf5');text('E 말걸기',near.x,near.y-29,12,'#69556f')}
+requestAnimationFrame(draw)}
+function persist(){localStorage.setItem('mongle_explore_v1',JSON.stringify({player,got:berries.filter(b=>b.got).map(b=>b.id)}));document.getElementById('berry').textContent=`🍓 찾은 몽글열매: ${berries.filter(b=>b.got).length}`}
+function interact(){let n=npcs.slice().sort((a,b)=>Math.hypot(a.x-player.x,a.y-player.y)-Math.hypot(b.x-player.x,b.y-player.y))[0];if(n&&Math.hypot(n.x-player.x,n.y-player.y)<58){msg.textContent=`${n.emoji} ${n.name}: “${n.line}”`;return}msg.textContent='주민 가까이에서 E를 누르면 이야기를 나눌 수 있어!';}
+function step(dx,dy){let nx=Math.max(28,Math.min(W-28,player.x+dx)),ny=Math.max(35,Math.min(H-28,player.y+dy));player.x=nx;player.y=ny;moving=true;for(const b of berries){if(!b.got&&Math.hypot(b.x-player.x,b.y-player.y)<27){b.got=true;msg.textContent='✨ 몽글열매를 찾았어! 잘했어!';} }persist()}
+window.addEventListener('keydown',e=>{let k=e.key.toLowerCase();if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k))e.preventDefault();keys[k]=true;if(k==='e')interact()});window.addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+function loop(){let dx=0,dy=0;if(keys.arrowleft||keys.a)dx-=2.7;if(keys.arrowright||keys.d)dx+=2.7;if(keys.arrowup||keys.w)dy-=2.7;if(keys.arrowdown||keys.s)dy+=2.7;if(dx||dy)step(dx,dy);requestAnimationFrame(loop)}
+document.querySelectorAll('[data-move]').forEach(btn=>{let d=btn.dataset.move;let interval;const run=()=>{if(d==='up')step(0,-13);if(d==='down')step(0,13);if(d==='left')step(-13,0);if(d==='right')step(13,0)};btn.addEventListener('click',run);btn.addEventListener('touchstart',e=>{e.preventDefault();run();interval=setInterval(run,100)},{passive:false});['touchend','touchcancel','mouseup','mouseleave'].forEach(ev=>btn.addEventListener(ev,()=>clearInterval(interval)))});
+document.getElementById('talk').onclick=interact;document.getElementById('reset').onclick=()=>{player={x:465,y:300};persist();msg.textContent='마을 광장으로 돌아왔어!';};persist();draw();loop();
+})();
+</script></body></html>'''
+    components.html(game_html, height=700, scrolling=False)
+    st.info("💡 지금은 혼자 탐험하는 버전이야. 다음에는 탐험에서 얻은 보상을 코인·퀘스트와 연결하고, 친구와 함께하는 온라인 기능을 추가할 수 있어.")
 
 with tab_town:
     st.subheader("🌳 한눈에 보는 우리 마을")
@@ -446,4 +503,9 @@ with tab_book:
     ]
     for title, done, desc in achievements:
         st.write(f"{'🏅' if done else '▫️'} **{title}** — {desc}")
-        
+
+st.markdown("---")
+st.markdown('<div style="text-align:center;color:#aa9aaa;font-size:.85rem">🌷 몽글몽글 타운 · 천천히 키워도 괜찮아. 오늘도 작은 행복을 모아 봐! 🌷</div>', unsafe_allow_html=True)
+if st.session_state.get("save_code"):
+    save_current_game()
+st.caption("저장 코드를 만들면 클라우드 저장과 다른 기기에서 불러오기를 사용할 수 있어. 저장 코드는 안전하게 보관해 줘.")
