@@ -414,7 +414,7 @@ with tab_build:
             log(f"✨ {selected} 업그레이드 완료!")
             save_current_game()
             st.rerun()
-            with tab_pet:
+with tab_pet:
     st.subheader("🐾 사랑스러운 펫 가족")
     st.write("펫은 마을의 행복도를 높여 줘. 마음에 드는 친구를 입양해 보자!")
     for p in PETS:
